@@ -385,7 +385,7 @@
                 // Handle mini-status display state based on school days
                 if (isHoliday || isWeekend) {
                     if (miniStatusEl) miniStatusEl.classList.add('hidden');
-                    document.title = "Baulko Bell Times"; // Standard tab title during break
+                    document.title = timeNoSecs; // Keep the time showing even during holidays and weekends!
                 } else {
                     if (miniStatusEl) miniStatusEl.classList.remove('hidden');
                 }
