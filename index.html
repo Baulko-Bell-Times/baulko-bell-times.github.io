@@ -53,6 +53,12 @@
         .dark .active-period {
             background-color: rgba(59, 130, 246, 0.45);
         }
+        
+        /* Custom checkbox style */
+        .task-checkbox:checked + span {
+            text-decoration: line-through;
+            opacity: 0.5;
+        }
     </style>
 </head>
 <body class="bg-lightBg text-lightText dark:bg-darkBg dark:text-darkText min-h-screen font-sans flex flex-col items-center p-4">
@@ -78,7 +84,7 @@
         </div>
     </div>
 
-    <!-- ALWAYS-ON GLOBAL CLOCK (Ticks unconditionally every second) -->
+    <!-- ALWAYS-ON GLOBAL CLOCK -->
     <div class="w-full max-w-4xl text-center mt-2 mb-6 bg-gray-100 dark:bg-zinc-900 rounded-xl p-6 shadow-sm border border-gray-200 dark:border-zinc-800">
         <div id="current-date" class="text-lg font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
             Loading Date...
@@ -88,7 +94,7 @@
         </h2>
     </div>
 
-    <!-- Active Timer Status Display (Hides during holidays) -->
+    <!-- Active Timer Status Display -->
     <div id="status-container" class="w-full max-w-4xl text-center mb-6">
         <!-- Holiday Indicator Banner -->
         <div id="holiday-message" class="hidden text-2xl font-bold text-red-500 mb-4 border-2 border-red-500 p-4 rounded-lg bg-red-500/10">
@@ -102,14 +108,20 @@
         </div>
 
         <!-- School Countdown Panel -->
-        <div id="active-timer" class="flex flex-col items-center">
+        <div id="active-timer" class="flex flex-col items-center w-full">
             <div id="schedule-type-badge" class="mb-2 px-4 py-1.5 bg-blue-200 text-blue-900 dark:bg-blue-900 dark:text-blue-100 rounded-full text-sm font-bold tracking-wide uppercase">
                 Loading Schedule...
             </div>
             
-            <div class="text-5xl md:text-6xl font-black text-gray-800 dark:text-gray-100 my-4 tracking-tight" id="countdown-display">
+            <div class="text-5xl md:text-6xl font-black text-gray-800 dark:text-gray-100 mt-4 mb-2 tracking-tight" id="countdown-display">
                 --:-- remaining
             </div>
+            
+            <!-- FEATURE 2: Animated Progress Bar -->
+            <div id="progress-container" class="w-full max-w-md bg-gray-200 dark:bg-zinc-800 rounded-full h-3 mb-4 hidden overflow-hidden shadow-inner border border-gray-300 dark:border-zinc-700">
+                <div id="progress-bar" class="bg-green-500 h-3 rounded-full transition-all duration-1000 ease-linear" style="width: 100%"></div>
+            </div>
+
             <p class="text-2xl font-medium text-gray-600 dark:text-gray-300" id="current-period-text">Waiting for schedule...</p>
         </div>
     </div>
@@ -118,7 +130,6 @@
     <div class="w-full max-w-4xl mb-2">
         <div class="flex justify-between items-end mb-2">
             <div class="text-sm font-semibold text-gray-500">View Weekly Timetables:</div>
-            <!-- Mini Status display above the tabs -->
             <div id="mini-status" class="text-xs md:text-sm font-bold text-blue-600 dark:text-blue-400 hidden">
                 --:-- • --m left
             </div>
@@ -139,6 +150,18 @@
                 <!-- Rows injected dynamically via JS -->
             </tbody>
         </table>
+    </div>
+
+    <!-- FEATURE 5: Homework & Task Quick-List -->
+    <div class="w-full max-w-4xl mt-6 bg-white dark:bg-zinc-900 rounded-xl p-5 border border-gray-300 dark:border-zinc-800 shadow-sm text-left">
+        <h3 class="text-lg font-bold mb-3 flex items-center gap-2">Homework & Tasks 📝</h3>
+        <div class="flex gap-2 mb-4">
+            <input type="text" id="task-input" placeholder="E.g., Maths chapter 3 review" class="flex-1 p-2 rounded border border-gray-300 dark:border-zinc-700 dark:bg-black dark:text-white focus:outline-none focus:border-blue-500">
+            <button id="add-task-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-5 rounded transition-colors">Add</button>
+        </div>
+        <ul id="task-list" class="space-y-2">
+            <!-- Tasks injected via JS -->
+        </ul>
     </div>
 
     <!-- Footer -->
@@ -237,11 +260,11 @@
         let currentViewingDay = null; 
         let notificationsEnabled = false;
         let lastNotifiedPeriod = null;
+        let tasks = JSON.parse(localStorage.getItem('baulko_tasks')) || []; // Load homework tasks
 
         // --- 2. DYNAMIC TABLE BUILDER ---
         function renderTable(dayId) {
             let activeSchedule;
-            // Robust fallback to prevent mobile browser crashes
             if (schedules[dayId] && schedules[dayId].data) {
                 activeSchedule = schedules[dayId].data;
             } else {
@@ -264,10 +287,43 @@
                 const tr = document.createElement('tr');
                 tr.id = 'row-' + period.id;
                 
+                // FEATURE 1: Fetch Custom Personalized Name
+                const customName = localStorage.getItem('custom_subject_' + period.id) || period.name;
+
                 const nameTd = document.createElement('td');
                 nameTd.className = "font-medium";
-                nameTd.textContent = period.name;
                 
+                // Wrapper to keep text and edit button aligned
+                const nameWrapper = document.createElement('div');
+                nameWrapper.className = "flex items-center justify-center gap-2";
+                
+                const nameSpan = document.createElement('span');
+                nameSpan.textContent = customName;
+                nameWrapper.appendChild(nameSpan);
+
+                // FEATURE 1: Edit Button for Personalization
+                if (!period.isPoint) {
+                    const editBtn = document.createElement('button');
+                    editBtn.innerHTML = "✏️";
+                    editBtn.className = "text-[0.65rem] opacity-30 hover:opacity-100 transition-opacity bg-gray-200 dark:bg-zinc-800 rounded-full px-1.5 py-0.5 ml-1";
+                    editBtn.title = "Customize Subject Name";
+                    editBtn.onclick = function() {
+                        const newName = prompt("Enter a custom name (e.g., 'Maths - Room 204'). \nLeave completely blank to reset to default:", customName !== period.name ? customName : "");
+                        if (newName !== null) {
+                            if (newName.trim() === "") {
+                                localStorage.removeItem('custom_subject_' + period.id);
+                            } else {
+                                localStorage.setItem('custom_subject_' + period.id, newName.trim());
+                            }
+                            renderTable(currentViewingDay);
+                            updateClock(); // Immediately apply changes to the live countdown
+                        }
+                    };
+                    nameWrapper.appendChild(editBtn);
+                }
+                
+                nameTd.appendChild(nameWrapper);
+
                 const timeTd = document.createElement('td');
                 timeTd.className = "font-mono";
                 if (period.isPoint) {
@@ -296,7 +352,6 @@
             currentViewingDay = dayId;
         }
 
-        // Attached to window so the HTML buttons can call it seamlessly
         window.switchViewDay = function(dayId) {
             renderTable(dayId);
             updateClock();
@@ -343,14 +398,11 @@
 
         function triggerNotification(periodName, minutesLeft) {
             if (!notificationsEnabled) return;
-            if (lastNotifiedPeriod === periodName) return; 
 
             new Notification("Class ending soon!", {
                 body: "Only " + minutesLeft + " minutes left in " + periodName + "!",
                 icon: "https://cdn-icons-png.flaticon.com/512/3602/3602145.png"
             });
-            
-            lastNotifiedPeriod = periodName; 
         }
 
         // --- 4. CORE LOOP ROUTINE ---
@@ -358,12 +410,10 @@
             try {
                 let now = new Date();
 
-                // 1. UPDATE THE MAIN CLOCK (Unconditional, always visible)
                 const dateEl = document.getElementById('current-date');
                 const timeEl = document.getElementById('current-time');
                 const miniStatusEl = document.getElementById('mini-status');
                 
-                // Formatted string without seconds (e.g. 10:35 am)
                 const timeNoSecs = now.toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit', hour12: true }).toLowerCase();
 
                 if (dateEl && timeEl) {
@@ -372,7 +422,6 @@
                     timeEl.textContent = now.toLocaleTimeString('en-AU', { hour12: false });
                 }
 
-                // 2. CHECK HOLIDAYS & WEEKENDS
                 const dayOfWeek = now.getDay();
                 const isHoliday = isSchoolHoliday(now);
                 const isWeekend = (dayOfWeek === 0 || dayOfWeek === 6);
@@ -382,10 +431,9 @@
                 const activeTimer = document.getElementById('active-timer');
                 const scheduleTable = document.getElementById('schedule-table');
 
-                // Handle mini-status display state based on school days
                 if (isHoliday || isWeekend) {
                     if (miniStatusEl) miniStatusEl.classList.add('hidden');
-                    document.title = timeNoSecs; // Keep the time showing even during holidays and weekends!
+                    document.title = timeNoSecs; 
                 } else {
                     if (miniStatusEl) miniStatusEl.classList.remove('hidden');
                 }
@@ -409,12 +457,10 @@
                     }
                 }
 
-                // 3. PROCESS SCHEDULE COUNTDOWN (Only if school is active)
                 const todaySchedule = schedules[dayOfWeek];
                 if (todaySchedule) {
                     const activeSchedule = todaySchedule.data;
 
-                    // Strip old UI highlights
                     activeSchedule.forEach(function(p) {
                         const row = document.getElementById('row-' + p.id);
                         if (row) row.classList.remove('active-period');
@@ -425,24 +471,26 @@
                     if (!isHoliday && !isWeekend) {
                         let currentPeriod = null;
                         let timeRemainingSecs = 0;
+                        let periodStartObj = null;
+                        let periodEndObj = null;
 
                         const dayStart = parseTime(activeSchedule[1].start, now); 
                         const dayEnd = parseTime(activeSchedule[activeSchedule.length - 1].start, now); 
 
-                        // Update mini status text for edge cases (before/after school)
                         let miniStatusText = "Break";
+                        const progressContainer = document.getElementById('progress-container');
 
                         if (now < dayStart) {
                             document.getElementById('current-period-text').textContent = "School hasn't started yet.";
                             document.getElementById('countdown-display').textContent = "--:-- remaining";
+                            if (progressContainer) progressContainer.classList.add('hidden');
                             miniStatusText = "Starts soon";
                             document.title = "[Starts soon] " + timeNoSecs;
                         } else if (now >= dayEnd) {
                             document.getElementById('current-period-text').textContent = "School is over for the day!";
                             document.getElementById('countdown-display').textContent = "--:-- remaining";
+                            if (progressContainer) progressContainer.classList.add('hidden');
                             miniStatusText = "School's out";
-                            
-                            // UPDATED: Simply display the live time after school is over
                             document.title = timeNoSecs;
                         } else {
                             // Find active period
@@ -455,54 +503,72 @@
 
                                 if (now >= pStart && now < pEnd) {
                                     currentPeriod = p;
-                                    // Use Math.ceil to prevent millisecond rounding skips
+                                    periodStartObj = pStart;
+                                    periodEndObj = pEnd;
                                     timeRemainingSecs = Math.ceil((pEnd - now) / 1000);
                                     break;
                                 }
                             }
 
                             if (currentPeriod) {
-                                // Add highlight to row ONLY if viewing today's tab
                                 if (currentViewingDay === dayOfWeek) {
                                     const activeRow = document.getElementById('row-' + currentPeriod.id);
                                     if (activeRow) activeRow.classList.add('active-period');
                                 }
 
-                                document.getElementById('current-period-text').textContent = "Currently in: " + currentPeriod.name;
+                                // Fetch custom name for titles & displays
+                                const activeCustomName = localStorage.getItem('custom_subject_' + currentPeriod.id) || currentPeriod.name;
+
+                                document.getElementById('current-period-text').textContent = "Currently in: " + activeCustomName;
                                 
-                                // Format time string (00:00)
                                 const mins = Math.floor(timeRemainingSecs / 60);
                                 const secs = timeRemainingSecs % 60;
                                 const strMins = mins < 10 ? '0' + mins : mins;
                                 const strSecs = secs < 10 ? '0' + secs : secs;
                                 document.getElementById('countdown-display').textContent = strMins + ":" + strSecs + " remaining";
                                 
-                                // Format text for the compact mini-status bar
-                                miniStatusText = mins + "m left";
+                                // FEATURE 2: Update Visual Progress Bar
+                                if (progressContainer) {
+                                    progressContainer.classList.remove('hidden');
+                                    const totalSecs = (periodEndObj - periodStartObj) / 1000;
+                                    const elapsedSecs = (now - periodStartObj) / 1000;
+                                    const progressPercent = Math.min(100, Math.max(0, (elapsedSecs / totalSecs) * 100));
+                                    
+                                    const progressBar = document.getElementById('progress-bar');
+                                    progressBar.style.width = progressPercent + '%';
+                                    
+                                    const remainingPercent = 100 - progressPercent;
+                                    if (remainingPercent > 50) {
+                                        progressBar.className = "bg-green-500 h-3 rounded-full transition-all duration-1000 ease-linear";
+                                    } else if (remainingPercent > 20) {
+                                        progressBar.className = "bg-yellow-500 h-3 rounded-full transition-all duration-1000 ease-linear";
+                                    } else {
+                                        progressBar.className = "bg-red-500 h-3 rounded-full transition-all duration-1000 ease-linear";
+                                    }
+                                }
 
-                                // DYNAMIC TAB TITLE FOR BACKGROUND TRACKING
-                                // Shows the time remaining in brackets followed by the wall clock time
+                                miniStatusText = mins + "m left";
                                 document.title = "[" + mins + "m left] " + timeNoSecs;
 
-                                // Handle Warning Notifications
                                 const warningInput = document.getElementById('warning-mins');
                                 const warningTriggerMins = warningInput ? parseInt(warningInput.value) : 5;
                                 
-                                if (lastNotifiedPeriod !== currentPeriod.name && timeRemainingSecs > warningTriggerMins * 60) {
+                                if (lastNotifiedPeriod !== currentPeriod.id && timeRemainingSecs > warningTriggerMins * 60) {
                                     lastNotifiedPeriod = null; 
                                 }
-                                if (timeRemainingSecs === warningTriggerMins * 60) {
-                                    triggerNotification(currentPeriod.name, warningTriggerMins);
+                                if (timeRemainingSecs === warningTriggerMins * 60 && lastNotifiedPeriod !== currentPeriod.id) {
+                                    triggerNotification(activeCustomName, warningTriggerMins);
+                                    lastNotifiedPeriod = currentPeriod.id;
                                 }
                             } else {
                                 document.getElementById('current-period-text').textContent = "Break / Class Transitions";
                                 document.getElementById('countdown-display').textContent = "--:--";
+                                if (progressContainer) progressContainer.classList.add('hidden');
                                 miniStatusText = "Break";
                                 document.title = "[Break] " + timeNoSecs;
                             }
                         }
                         
-                        // Push formatted text to the mini status bar
                         if (miniStatusEl) {
                             miniStatusEl.textContent = timeNoSecs + " • " + miniStatusText;
                         }
@@ -513,9 +579,63 @@
             }
         }
 
-        // --- 5. INITIALIZATION ---
+        // --- 5. HOMEWORK TRACKER LOGIC ---
+        function renderTasks() {
+            const list = document.getElementById('task-list');
+            if (!list) return;
+            list.innerHTML = '';
+            
+            if (tasks.length === 0) {
+                list.innerHTML = '<li class="text-gray-500 text-sm italic">You are all caught up! No tasks assigned.</li>';
+                return;
+            }
+
+            tasks.forEach(function(task, index) {
+                const li = document.createElement('li');
+                li.className = "flex items-center justify-between p-3 bg-gray-50 dark:bg-black border border-gray-200 dark:border-zinc-800 rounded-lg";
+                
+                const label = document.createElement('label');
+                label.className = "flex items-center gap-3 cursor-pointer flex-1";
+                
+                const checkbox = document.createElement('input');
+                checkbox.type = "checkbox";
+                checkbox.checked = task.completed;
+                checkbox.className = "task-checkbox w-4 h-4 cursor-pointer accent-blue-600 rounded";
+                checkbox.onchange = function() {
+                    tasks[index].completed = checkbox.checked;
+                    localStorage.setItem('baulko_tasks', JSON.stringify(tasks));
+                    // Minimal delay to let CSS transition happen before re-rendering
+                    setTimeout(renderTasks, 150);
+                };
+                
+                const textSpan = document.createElement('span');
+                textSpan.textContent = task.text;
+                textSpan.className = "font-medium text-gray-800 dark:text-gray-200 transition-all";
+                if(task.completed) {
+                    textSpan.classList.add('line-through', 'opacity-50');
+                }
+                
+                label.appendChild(checkbox);
+                label.appendChild(textSpan);
+                
+                const delBtn = document.createElement('button');
+                delBtn.innerHTML = "🗑️";
+                delBtn.className = "opacity-50 hover:opacity-100 transition text-lg px-2";
+                delBtn.title = "Delete Task";
+                delBtn.onclick = function() {
+                    tasks.splice(index, 1);
+                    localStorage.setItem('baulko_tasks', JSON.stringify(tasks));
+                    renderTasks();
+                };
+                
+                li.appendChild(label);
+                li.appendChild(delBtn);
+                list.appendChild(li);
+            });
+        }
+
+        // --- 6. INITIALIZATION ---
         function initializeApp() {
-            // Wire up theme toggler
             const themeBtn = document.getElementById('theme-toggle');
             if (themeBtn) {
                 themeBtn.addEventListener('click', function() {
@@ -523,7 +643,6 @@
                 });
             }
 
-            // Wire up notification button
             const notifyBtn = document.getElementById('notify-btn');
             if (notifyBtn) {
                 notifyBtn.addEventListener('click', function() {
@@ -542,14 +661,30 @@
                 });
             }
 
-            // Select default tab based on actual day
+            // Wire up Homework Tracker Input
+            const addTaskBtn = document.getElementById('add-task-btn');
+            const taskInput = document.getElementById('task-input');
+            if (addTaskBtn && taskInput) {
+                addTaskBtn.onclick = function() {
+                    if (taskInput.value.trim() !== "") {
+                        tasks.push({ text: taskInput.value.trim(), completed: false });
+                        taskInput.value = "";
+                        localStorage.setItem('baulko_tasks', JSON.stringify(tasks));
+                        renderTasks();
+                    }
+                };
+                taskInput.onkeypress = function(e) {
+                    if (e.key === 'Enter') addTaskBtn.click();
+                };
+            }
+            renderTasks();
+
             let currentSystemDay = new Date().getDay();
             if (currentSystemDay === 0 || currentSystemDay === 6) {
-                currentSystemDay = 1; // Default to Monday if viewed on a weekend
+                currentSystemDay = 1; 
             }
             renderTable(currentSystemDay);
 
-            // Kick off clock loop instantly and perfectly sync to system seconds
             function runClock() {
                 updateClock();
                 const now = new Date();
@@ -559,14 +694,13 @@
             runClock();
         }
 
-        // Safe DOM loading execution to bypass mobile async script loading latency
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', initializeApp);
         } else {
             initializeApp();
         }
 
-        // --- 6. OFFLINE SERVICE WORKER ---
+        // --- 7. OFFLINE SERVICE WORKER ---
         const isLiveWebpage = window.location.protocol.startsWith('http');
         const isSandboxedPreview = window.location.host.includes('usercontent.goog') || window.location.host.includes('artifact');
         
