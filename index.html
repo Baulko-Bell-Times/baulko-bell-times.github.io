@@ -422,7 +422,8 @@
 
                                 if (now >= pStart && now < pEnd) {
                                     currentPeriod = p;
-                                    timeRemainingSecs = Math.floor((pEnd - now) / 1000);
+                                    // Use Math.ceil to prevent millisecond rounding skips
+                                    timeRemainingSecs = Math.ceil((pEnd - now) / 1000);
                                     break;
                                 }
                             }
@@ -503,9 +504,14 @@
             }
             renderTable(currentSystemDay);
 
-            // Kick off clock loop instantly
-            updateClock();
-            window.setInterval(updateClock, 1000);
+            // Kick off clock loop instantly and perfectly sync to system seconds
+            function runClock() {
+                updateClock();
+                const now = new Date();
+                const msUntilNextSecond = 1000 - now.getMilliseconds();
+                window.setTimeout(runClock, msUntilNextSecond);
+            }
+            runClock();
         });
 
         // --- 6. OFFLINE SERVICE WORKER ---
