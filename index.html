@@ -4,6 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Baulko Bell Times</title>
+    
+    <!-- SEO Search Optimization Tags -->
+    <meta name="description" content="Check the live bell times, schedules, and countdowns for Baulkham Hills High School. Custom daily timetables that work offline with quiet alerts!">
+    <meta name="keywords" content="Baulko, Baulkham Hills High School, Baulko bell times, BHHS, school timetable, bell times tracker, Jayden Cho">
+    <meta name="robots" content="index, follow">
+
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -131,7 +137,7 @@
 
     <!-- Footer -->
     <div class="mt-8 mb-4 text-xs text-center text-gray-500 dark:text-gray-500">
-        made by Jayden Cho
+        Made by Jayden Cho
     </div>
 
     <script>
@@ -467,9 +473,7 @@
         }
 
         // --- 5. INITIALIZATION ---
-        // We wait for the DOM to completely load to prevent mobile script crashes
-        document.addEventListener('DOMContentLoaded', function() {
-            
+        function initializeApp() {
             // Wire up theme toggler
             const themeBtn = document.getElementById('theme-toggle');
             if (themeBtn) {
@@ -512,7 +516,14 @@
                 window.setTimeout(runClock, msUntilNextSecond);
             }
             runClock();
-        });
+        }
+
+        // Safe DOM loading execution to bypass mobile async script loading latency
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initializeApp);
+        } else {
+            initializeApp();
+        }
 
         // --- 6. OFFLINE SERVICE WORKER ---
         const isLiveWebpage = window.location.protocol.startsWith('http');
