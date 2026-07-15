@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Baulko Bell Times</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        darkBg: '#000000',
+                        darkText: '#ffffff',
+                        lightBg: '#ffffff',
+                        lightText: '#000000'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            transition: background-color 0.3s, color 0.3s;
+        }
+        
+        .schedule-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        
+        .schedule-table th, .schedule-table td {
+            border: 1px solid currentColor;
+            padding: 16px;
+            text-align: center;
+            font-size: 1.1rem;
+        }
+        
+        /* Highlight row representing the active period */
+        .active-period {
+            background-color: rgba(59, 130, 246, 0.25); 
+            font-weight: bold;
+        }
+
+        .dark .active-period {
+            background-color: rgba(59, 130, 246, 0.45);
+        }
+    </style>
+</head>
+<body class="bg-lightBg text-lightText dark:bg-darkBg dark:text-darkText min-h-screen font-sans flex flex-col items-center p-4">
+
+    <!-- Header & App Controls -->
+    <div class="w-full max-w-4xl flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
+        <div>
+            <h1 class="text-3xl font-bold">Baulko Bell Times</h1>
+            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Upgraded 5-Day Schedules & Custom Notifications</p>
+        </div>
+        
+        <div class="flex flex-wrap items-center justify-center gap-4 bg-gray-200 dark:bg-gray-800 p-3 rounded-lg">
+            <!-- Theme Toggle -->
+            <button id="theme-toggle" class="p-2 bg-gray-300 dark:bg-gray-700 rounded hover:bg-gray-400 transition text-sm">
+                Toggle Theme
+            </button>
+            
+            <!-- Warning Notification Time Settings -->
+            <div class="flex items-center gap-2 border-l border-gray-400 pl-4">
+                <label for="warning-mins" class="text-sm">Warning (mins):</label>
+                <input type="number" id="warning-mins" value="5" min="1" max="60" class="w-16 p-1 text-black rounded text-center">
+                <button id="notify-btn" class="p-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition text-sm">
+                    Enable Alerts
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Active Timer Status Display -->
+    <div id="status-container" class="w-full max-w-4xl text-center mb-6">
+        <!-- Holiday Indicator Banner -->
+        <div id="holiday-message" class="hidden text-3xl font-bold text-red-500 mb-4 border-2 border-red-500 p-4 rounded-lg bg-red-500/10">
+            🎉 School Holidays! No active bells today. 🎉
+            <div class="text-xs font-normal text-gray-500 dark:text-gray-400 mt-2">Term 3 starts Tuesday, 21 July.</div>
+        </div>
+        
+        <!-- Weekend Indicator Banner -->
+        <div id="weekend-message" class="hidden text-3xl font-bold text-yellow-500 mb-4 border-2 border-yellow-500 p-4 rounded-lg bg-yellow-500/10">
+            Weekend! Enjoy your break. 🏖️
+        </div>
+
+        <!-- Countdown Panel -->
+        <div id="active-timer" class="flex flex-col items-center">
+            <div id="schedule-type-badge" class="mb-2 px-3 py-1 bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 rounded-full text-xs font-bold tracking-wide uppercase">
+                Normal Schedule
+            </div>
+            <h2 class="text-2xl mb-2">Current Time: <span id="current-time" class="font-mono font-bold">--:--:--</span></h2>
+            <div class="text-4xl font-bold text-blue-600 dark:text-blue-400 my-4" id="countdown-display">
+                --:-- remaining
+            </div>
+            <p class="text-xl" id="current-period-text">Waiting for schedule...</p>
+        </div>
+    </div>
+
+    <!-- Schedule Weekly Viewer Tabs -->
+    <div class="w-full max-w-4xl mb-2">
+        <div class="text-sm font-semibold mb-2 text-gray-500">View Weekly Timetables:</div>
+        <div class="grid grid-cols-5 gap-1">
+            <button onclick="switchViewDay(1)" id="tab-1" class="py-2 text-xs md:text-sm font-bold rounded-t-lg bg-gray-200 dark:bg-gray-800">Mon</button>
+            <button onclick="switchViewDay(2)" id="tab-2" class="py-2 text-xs md:text-sm font-bold rounded-t-lg bg-gray-200 dark:bg-gray-800">Tue</button>
+            <button onclick="switchViewDay(3)" id="tab-3" class="py-2 text-xs md:text-sm font-bold rounded-t-lg bg-gray-200 dark:bg-gray-800">Wed</button>
+            <button onclick="switchViewDay(4)" id="tab-4" class="py-2 text-xs md:text-sm font-bold rounded-t-lg bg-gray-200 dark:bg-gray-800">Thu</button>
+            <button onclick="switchViewDay(5)" id="tab-5" class="py-2 text-xs md:text-sm font-bold rounded-t-lg bg-gray-200 dark:bg-gray-800">Fri</button>
+        </div>
+    </div>
+
+    <!-- The Schedule Table -->
+    <div class="w-full max-w-4xl overflow-x-auto bg-white dark:bg-black rounded-b-xl border border-gray-300 dark:border-zinc-800 shadow-sm">
+        <table class="schedule-table" id="schedule-table">
+            <tbody id="schedule-body">
+                <!-- Rows injected dynamically via JS -->
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        // --- 1. DETAILED SCHEDULE DATA (Mapped directly from your screenshot) ---
+        const tuesdayThursdaySchedule = [
+            { id: "start", name: "Start", start: "08:38", end: "08:38", isPoint: true },
+            { id: "rc", name: "Roll Call", start: "08:38", end: "08:44" },
+            { id: "p1", name: "Period 1", start: "08:44", end: "09:26" },
+            { id: "p2", name: "Period 2", start: "09:26", end: "10:06" },
+            { id: "recess", name: "Recess", start: "10:06", end: "10:25" },
+            { id: "p3", name: "Period 3", start: "10:25", end: "11:05" },
+            { id: "p4", name: "Period 4", start: "11:05", end: "11:45" },
+            { id: "break", name: "Break", start: "11:45", end: "11:50" },
+            { id: "p5", name: "Period 5", start: "11:50", end: "12:30" },
+            { id: "p6", name: "Period 6", start: "12:30", end: "13:10" },
+            { id: "lunch", name: "Lunch", start: "13:10", end: "13:46" },
+            { id: "p7", name: "Period 7", start: "13:46", end: "14:26" },
+            { id: "p8", name: "Period 8", start: "14:26", end: "15:06" },
+            { id: "end", name: "End", start: "15:06", end: "15:06", isPoint: true }
+        ];
+
+        const schedules = {
+            1: { // Monday
+                name: "Monday (Assembly)",
+                data: [
+                    { id: "start", name: "Start", start: "08:38", end: "08:38", isPoint: true },
+                    { id: "rc", name: "Roll Call", start: "08:38", end: "08:44" },
+                    { id: "p1", name: "Period 1", start: "08:44", end: "09:23" },
+                    { id: "p2", name: "Period 2", start: "09:23", end: "10:00" },
+                    { id: "assembly", name: "Assembly", start: "10:00", end: "10:24" },
+                    { id: "recess", name: "Recess", start: "10:24", end: "10:43" },
+                    { id: "p3", name: "Period 3", start: "10:43", end: "11:20" },
+                    { id: "p4", name: "Period 4", start: "11:20", end: "11:57" },
+                    { id: "break", name: "Break", start: "11:57", end: "12:02" },
+                    { id: "p5", name: "Period 5", start: "12:02", end: "12:39" },
+                    { id: "p6", name: "Period 6", start: "12:39", end: "13:16" },
+                    { id: "lunch", name: "Lunch", start: "13:16", end: "13:52" },
+                    { id: "p7", name: "Period 7", start: "13:52", end: "14:29" },
+                    { id: "p8", name: "Period 8", start: "14:29", end: "15:06" },
+                    { id: "end", name: "End", start: "15:06", end: "15:06", isPoint: true }
+                ]
+            },
+            2: { // Tuesday
+                name: "Tuesday Schedule",
+                data: tuesdayThursdaySchedule
+            },
+            3: { // Wednesday
+                name: "Wednesday (Sport)",
+                data: [
+                    { id: "start", name: "Start", start: "08:38", end: "08:38", isPoint: true },
+                    { id: "rc", name: "Roll Call", start: "08:38", end: "08:44" },
+                    { id: "p1", name: "Period 1", start: "08:44", end: "09:23" },
+                    { id: "p2", name: "Period 2", start: "09:23", end: "10:00" },
+                    { id: "recess", name: "Recess", start: "10:00", end: "10:15" },
+                    { id: "p3", name: "Period 3", start: "10:15", end: "10:52" },
+                    { id: "p4", name: "Period 4", start: "10:52", end: "11:29" },
+                    { id: "p5", name: "Period 5", start: "11:29", end: "12:06" },
+                    { id: "lunch", name: "Lunch", start: "12:06", end: "12:39" },
+                    { id: "sport", name: "Sport / Period 6", start: "12:39", end: "13:16" },
+                    { id: "p7", name: "Period 7", start: "13:16", end: "13:53" },
+                    { id: "p8", name: "Period 8", start: "13:53", end: "14:30" },
+                    { id: "end", name: "End", start: "14:30", end: "14:30", isPoint: true }
+                ]
+            },
+            4: { // Thursday
+                name: "Thursday Schedule",
+                data: tuesdayThursdaySchedule
+            },
+            5: { // Friday
+                name: "Friday Schedule",
+                data: [
+                    { id: "start", name: "Start", start: "08:38", end: "08:38", isPoint: true },
+                    { id: "rc", name: "Roll Call", start: "08:38", end: "08:44" },
+                    { id: "p1", name: "Period 1", start: "08:44", end: "09:26" },
+                    { id: "p2", name: "Period 2", start: "09:26", end: "10:05" },
+                    { id: "recess", name: "Recess", start: "10:05", end: "10:30" },
+                    { id: "p3", name: "Period 3", start: "10:30", end: "11:09" },
+                    { id: "p4", name: "Period 4", start: "11:09", end: "11:48" },
+                    { id: "break", name: "Break", start: "11:48", end: "11:53" },
+                    { id: "p5", name: "Period 5", start: "11:53", end: "12:32" },
+                    { id: "p6", name: "Period 6", start: "12:32", end: "13:11" },
+                    { id: "lunch", name: "Lunch", start: "13:11", end: "13:47" },
+                    { id: "p7", name: "Period 7", start: "13:47", end: "14:27" },
+                    { id: "p8", name: "Period 8", start: "14:27", end: "15:06" },
+                    { id: "end", name: "End", start: "15:06", end: "15:06", isPoint: true }
+                ]
+            }
+        };
+
+        // --- 2. THEME TOGGLE LOGIC ---
+        const themeBtn = document.getElementById('theme-toggle');
+        const htmlEl = document.documentElement;
+        themeBtn.addEventListener('click', () => {
+            htmlEl.classList.toggle('dark');
+        });
+
+        // --- 3. DYNAMIC TABLE BUILDER ---
+        let currentViewingDay = null; // Tracks which day is currently being inspected in table UI
+        
+        function renderTable(dayId) {
+            const activeSchedule = schedules[dayId]?.data || schedules[2].data;
+            const tbody = document.getElementById('schedule-body');
+            tbody.innerHTML = ''; // Clear existing rows
+            
+            // Build header row
+            const headerTr = document.createElement('tr');
+            headerTr.className = "bg-gray-100 dark:bg-zinc-900 font-bold";
+            const th1 = document.createElement('td'); th1.textContent = "Period / Activity";
+            const th2 = document.createElement('td'); th2.textContent = "Time Range";
+            headerTr.appendChild(th1); headerTr.appendChild(th2);
+            tbody.appendChild(headerTr);
+
+            // Populate periods
+            activeSchedule.forEach(period => {
+                const tr = document.createElement('tr');
+                tr.id = `row-${period.id}`;
+                
+                const nameTd = document.createElement('td');
+                nameTd.className = "font-medium";
+                nameTd.textContent = period.name;
+                
+                const timeTd = document.createElement('td');
+                timeTd.className = "font-mono";
+                if (period.isPoint) {
+                    timeTd.textContent = formatToAMPM(period.start);
+                } else {
+                    timeTd.textContent = `${formatToAMPM(period.start)} - ${formatToAMPM(period.end)}`;
+                }
+                
+                tr.appendChild(nameTd);
+                tr.appendChild(timeTd);
+                tbody.appendChild(tr);
+            });
+
+            // Handle Active Tabs UI styling
+            for (let i = 1; i <= 5; i++) {
+                const tab = document.getElementById(`tab-${i}`);
+                if (i === dayId) {
+                    tab.className = "py-2 text-xs md:text-sm font-bold rounded-t-lg bg-blue-600 text-white border-b-2 border-blue-600";
+                } else {
+                    tab.className = "py-2 text-xs md:text-sm font-bold rounded-t-lg bg-gray-200 dark:bg-zinc-800 border-b-2 border-transparent hover:bg-gray-300 dark:hover:bg-zinc-700";
+                }
+            }
+
+            currentViewingDay = dayId;
+        }
+
+        function switchViewDay(dayId) {
+            renderTable(dayId);
+            updateClock(); // Re-apply the active class highlighters onto the new table day
+        }
+
+        function formatToAMPM(time24) {
+            let [hours, minutes] = time24.split(':').map(Number);
+            const ampm = hours >= 12 ? 'pm' : 'am';
+            hours = hours % 12;
+            hours = hours ? hours : 12; // Handle 0 -> 12
+            const strMinutes = minutes < 10 ? '0' + minutes : minutes;
+            return `${hours}:${strMinutes}${ampm}`;
+        }
+
+        // --- 4. NOTIFICATION AGENT ---
+        const notifyBtn = document.getElementById('notify-btn');
+        let notificationsEnabled = false;
+        let lastNotifiedPeriod = null;
+
+        if (Notification.permission === 'granted') {
+            notificationsEnabled = true;
+            notifyBtn.textContent = "Alerts Active ✅";
+            notifyBtn.classList.replace('bg-blue-600', 'bg-green-600');
+        }
+
+        notifyBtn.addEventListener('click', () => {
+            if (Notification.permission === 'default' || Notification.permission === 'denied') {
+                Notification.requestPermission().then(permission => {
+                    if (permission === 'granted') {
+                        notificationsEnabled = true;
+                        notifyBtn.textContent = "Alerts Active ✅";
+                        notifyBtn.classList.replace('bg-blue-600', 'bg-green-600');
+                        new Notification("Baulko Bell Times", { body: "Your notifications have been configured!" });
+                    } else {
+                        alert("Please approve notification privileges inside your browser configurations to utilize notifications.");
+                    }
+                });
+            }
+        });
+
+        function triggerNotification(periodName, minutesLeft) {
+            if (!notificationsEnabled) return;
+            if (lastNotifiedPeriod === periodName) return; // Prevent spam
+
+            new Notification("Class ending soon!", {
+                body: `Only ${minutesLeft} minutes left in ${periodName}!`,
+                icon: "https://cdn-icons-png.flaticon.com/512/3602/3602145.png"
+            });
+            
+            lastNotifiedPeriod = periodName; 
+        }
+
+        // --- 5. TIME, HOLIDAY & ACTIVE CALCULATION LOGIC ---
+        function parseDate(dateStr) {
+            const [y, m, d] = dateStr.split('-');
+            return new Date(y, m - 1, d);
+        }
+
+        const terms = [
+            { start: parseDate('2026-07-21'), end: parseDate('2026-09-25') }, // Term 3
+            { start: parseDate('2026-10-13'), end: parseDate('2026-12-17') }  // Term 4
+        ];
+
+        // Decides if today's date falls in school holidays or school term
+        function isSchoolHoliday(date) {
+            const checkDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+            for (let term of terms) {
+                if (checkDate >= term.start && checkDate <= term.end) {
+                    return false; 
+                }
+            }
+            return true;
+        }
+
+        function parseTime(timeStr, targetDate) {
+            const [hours, minutes] = timeStr.split(':').map(Number);
+            const d = new Date(targetDate);
+            d.setHours(hours, minutes, 0, 0);
+            return d;
+        }
+
+        function updateClock() {
+            let now = new Date();
+
+            // 1. Update Clock
+            document.getElementById('current-time').textContent = now.toLocaleTimeString('en-AU', { hour12: false });
+
+            // 2. Check Holidays
+            if (isSchoolHoliday(now)) {
+                document.getElementById('holiday-message').classList.remove('hidden');
+                document.getElementById('active-timer').classList.add('hidden');
+                document.getElementById('schedule-table').classList.add('opacity-40');
+            } else {
+                document.getElementById('holiday-message').classList.add('hidden');
+                document.getElementById('schedule-table').classList.remove('opacity-40');
+            }
+
+            // 3. Check Weekends (0 is Sunday, 6 is Saturday)
+            const dayOfWeek = now.getDay();
+            const isWeekend = (dayOfWeek === 0 || dayOfWeek === 6);
+            if (isWeekend && !isSchoolHoliday(now)) {
+                document.getElementById('weekend-message').classList.remove('hidden');
+                document.getElementById('active-timer').classList.add('hidden');
+            } else {
+                document.getElementById('weekend-message').classList.add('hidden');
+                if (!isSchoolHoliday(now)) {
+                    document.getElementById('active-timer').classList.remove('hidden');
+                }
+            }
+
+            // 4. Highlight current period (if on a school weekday and viewing that day's schedule)
+            const todaySchedule = schedules[dayOfWeek];
+            if (todaySchedule) {
+                const activeSchedule = todaySchedule.data;
+
+                // Strip old highlights
+                activeSchedule.forEach(p => {
+                    const row = document.getElementById(`row-${p.id}`);
+                    if (row) row.classList.remove('active-period');
+                });
+
+                // Update active badge type header info
+                document.getElementById('schedule-type-badge').textContent = todaySchedule.name;
+
+                if (!isSchoolHoliday(now) && !isWeekend) {
+                    let currentPeriod = null;
+                    let timeRemainingSecs = 0;
+
+                    const dayStart = parseTime(activeSchedule[1].start, now); 
+                    const dayEnd = parseTime(activeSchedule[activeSchedule.length - 1].start, now); 
+
+                    if (now < dayStart) {
+                        document.getElementById('current-period-text').textContent = "School hasn't started yet.";
+                        document.getElementById('countdown-display').textContent = "--:-- remaining";
+                    } else if (now >= dayEnd) {
+                        document.getElementById('current-period-text').textContent = "School is over for the day!";
+                        document.getElementById('countdown-display').textContent = "--:-- remaining";
+                    } else {
+                        // Find current class
+                        for (let i = 0; i < activeSchedule.length; i++) {
+                            const p = activeSchedule[i];
+                            if (p.isPoint) continue;
+
+                            const pStart = parseTime(p.start, now);
+                            const pEnd = parseTime(p.end, now);
+
+                            if (now >= pStart && now < pEnd) {
+                                currentPeriod = p;
+                                timeRemainingSecs = Math.floor((pEnd - now) / 1000);
+                                break;
+                            }
+                        }
+
+                        if (currentPeriod) {
+                            // Highlight the active row if currently viewing that day's table
+                            if (currentViewingDay === dayOfWeek) {
+                                const activeRow = document.getElementById(`row-${currentPeriod.id}`);
+                                if (activeRow) activeRow.classList.add('active-period');
+                            }
+
+                            document.getElementById('current-period-text').textContent = `Currently in: ${currentPeriod.name}`;
+                            
+                            // Format timer countdown
+                            const mins = Math.floor(timeRemainingSecs / 60);
+                            const secs = timeRemainingSecs % 60;
+                            document.getElementById('countdown-display').textContent = 
+                                `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')} remaining`;
+
+                            // Trigger Custom Warning Notification
+                            const warningTriggerMins = parseInt(document.getElementById('warning-mins').value);
+                            if (lastNotifiedPeriod !== currentPeriod.name && timeRemainingSecs > warningTriggerMins * 60) {
+                                lastNotifiedPeriod = null; 
+                            }
+                            if (timeRemainingSecs === warningTriggerMins * 60) {
+                                triggerNotification(currentPeriod.name, warningTriggerMins);
+                            }
+                        } else {
+                            document.getElementById('current-period-text').textContent = "Break / Class Transitions";
+                            document.getElementById('countdown-display').textContent = "--:--";
+                        }
+                    }
+                }
+            }
+        }
+
+        // --- 6. LOAD THE APP ---
+        // Default table layout viewport to today (or Monday if it's the weekend)
+        const currentSystemDay = new Date().getDay();
+        const defaultView = (currentSystemDay === 0 || currentSystemDay === 6) ? 1 : currentSystemDay;
+        renderTable(defaultView);
+
+        // Run timer loop
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        // --- 7. OFFLINE SERVICE WORKER ---
+        // Safe check to make sure we only register the Service Worker on live HTTP/HTTPS hostings 
+        // and avoid triggering sandboxed browser preview errors.
+        const isLiveWebpage = window.location.protocol.startsWith('http');
+        const isSandboxedPreview = window.location.host.includes('usercontent.goog') || window.location.host.includes('artifact');
+        
+        if ('serviceWorker' in navigator && isLiveWebpage && !isSandboxedPreview) {
+            // We use 'sw.js' if it exists. We fail silently/gracefully if running locally or not deployed yet.
+            navigator.serviceWorker.register('sw.js')
+                .then(reg => console.log('Offline cache helper loaded:', reg.scope))
+                .catch(err => {
+                    // This console logs a friendly notice instead of throwing a noisy system error
+                    console.log('Offline caching setup is active. Create a "sw.js" file on your root folder to store physical caches.');
+                });
+        }
+    </script>
+</body>
+</html>
